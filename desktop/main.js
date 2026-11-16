@@ -1,0 +1,95 @@
+'use strict';
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const engine = require('./engine');
+
+// Bundled ffmpeg lives outside the app archive once packaged.
+const ffmpeg = require('ffmpeg-static').replace('app.asar', 'app.asar.unpacked');
+const outputRoot = () => path.join(app.getPath('videos'), app.getName());
+
+const YTDLP_ASSET = { darwin: 'yt-dlp_macos', win32: 'yt-dlp.exe', linux: 'yt-dlp_linux' };
+
+// Link downloads need yt-dlp, which must stay current to keep working, so it is
+// fetched on first use rather than shipped inside the installer.
+// ponytail: fetched once and never refreshed; add an update check when links start failing
+async function ensureYtdlp(onProgress) {
+  const asset = YTDLP_ASSET[process.platform];
+  if (!asset) throw new Error('Link downloads are not supported on this system. Choose a video file instead.');
+  const dest = path.join(app.getPath('userData'), asset);
+  if (fs.existsSync(dest)) return dest;
+  onProgress('Setting up link downloads (first time only)…');
+  const res = await fetch(`https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`);
+  if (!res.ok) throw new Error(`Could not set up link downloads (HTTP ${res.status}). Check your connection.`);
+  fs.writeFileSync(`${dest}.part`, Buffer.from(await res.arrayBuffer()), { mode: 0o755 });
+  fs.renameSync(`${dest}.part`, dest);
+  return dest;
+}
+
+function insideOutput(file) {
+  const resolved = path.resolve(String(file));
+  if (!resolved.startsWith(outputRoot() + path.sep)) throw new Error('That file is outside the clips folder.');
+  return resolved;
+}
+
+const toView = (clip) => ({ ...clip, url: `${pathToFileURL(clip.file).href}?t=${Date.now()}` });
+
+ipcMain.handle('pick', async () => {
+  const { filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'Videos', extensions: ['mp4', 'mkv', 'mov', 'webm', 'flv', 'avi', 'm4v'] }],
+  });
+  return filePaths[0] ?? null;
+});
+
+ipcMain.handle('clip', async (event, { source, count, frame }) => {
+  const onProgress = (msg) => event.sender.send('progress', msg);
+  source = String(source ?? '').trim();
+  count = Math.min(30, Math.max(1, Math.floor(Number(count)) || 10));
+  if (!source) throw new Error('Paste a link or choose a video file first.');
+
+  const outDir = path.join(outputRoot(), new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-'));
+  fs.mkdirSync(outDir, { recursive: true });
+
+  let src = source;
+  if (/^https?:\/\//i.test(source)) {
+    if (!URL.canParse(source)) throw new Error('That link does not look valid.');
+    const ytdlp = await ensureYtdlp(onProgress);
+    onProgress('Downloading the video…');
+    src = await engine.download(ytdlp, ffmpeg, source, outDir);
+  } else if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+    throw new Error('That video file could not be found.');
+  }
+
+  frame = String(frame);
+  const clips = await engine.clipVideo({ ffmpeg, src, count, frame, outDir, onProgress });
+  return { src, frame, clips: clips.map(toView) };
+});
+
+ipcMain.handle('recut', async (_event, { src, file, start, end, frame }) => {
+  start = Number(start);
+  end = Number(end);
+  if (!(start >= 0) || !(end > start)) throw new Error('End must be after start.');
+  if (!fs.existsSync(String(src))) throw new Error('The original video is no longer available.');
+  file = insideOutput(file);
+  await engine.cut(ffmpeg, String(src), start, end, file, String(frame));
+  return toView({ file, start, end });
+});
+
+ipcMain.handle('reveal', (_event, file) => shell.showItemInFolder(insideOutput(file)));
+
+app.whenReady().then(() => {
+  const win = new BrowserWindow({
+    width: 1100,
+    height: 780,
+    minWidth: 720,
+    minHeight: 560,
+    backgroundColor: '#14110f',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+  });
+  win.setMenuBarVisibility(false);
+  win.loadFile(path.join(__dirname, 'index.html'));
+});
+
+app.on('window-all-closed', () => app.quit());

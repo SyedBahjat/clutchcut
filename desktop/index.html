@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src file:">
+  <title>ClutchCut</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Clutch<span>Cut</span></h1>
+    <p>Finds the loud moments in a long video and cuts them out. Everything runs on this computer.</p>
+  </header>
+
+  <main>
+    <form id="job">
+      <label for="source">Video link or file</label>
+      <div class="source-row">
+        <input id="source" type="text" placeholder="Paste a video link, or choose a file" autocomplete="off" spellcheck="false">
+        <button type="button" id="pick" class="quiet">Choose file</button>
+      </div>
+      <div class="options">
+        <label>Clips <input id="count" type="number" min="1" max="30" value="10"></label>
+        <label>Shape
+          <select id="frame">
+            <option value="fit">Vertical, whole picture</option>
+            <option value="fill">Vertical, zoomed in</option>
+            <option value="original">Same as the video</option>
+          </select>
+        </label>
+        <button type="submit" id="go">Find clips</button>
+      </div>
+    </form>
+
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="clips" aria-label="Clips"></section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

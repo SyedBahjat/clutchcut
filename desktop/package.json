@@ -1,0 +1,31 @@
+{
+  "name": "clutchcut",
+  "productName": "ClutchCut",
+  "version": "0.1.0",
+  "description": "Finds the standout moments in long videos and cuts them into clips.",
+  "license": "MIT",
+  "repository": "github:SyedBahjat/clutchcut",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node engine.js --selftest",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0"
+  },
+  "devDependencies": {
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.clutchcut.app",
+    "files": ["main.js", "preload.js", "engine.js", "index.html", "style.css", "renderer.js"],
+    "asarUnpack": ["node_modules/ffmpeg-static/**"],
+    "mac": { "target": "dmg", "category": "public.app-category.video", "identity": "-" },
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
+    "publish": { "provider": "github", "releaseType": "release" }
+  }
+}
