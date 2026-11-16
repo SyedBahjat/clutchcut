@@ -21,13 +21,15 @@ function clipCard(clip, index, job) {
   const end = el('input', { type: 'number', step: '0.5', min: '0', value: clip.end, ariaLabel: 'End, in seconds' });
   const recut = el('button', { type: 'button', className: 'quiet', textContent: 'Re-cut' });
   const reveal = el('button', { type: 'button', className: 'quiet', textContent: 'Show file' });
+  const save = el('button', { type: 'button', className: 'quiet', textContent: 'Save as…' });
+  const remove = el('button', { type: 'button', className: 'quiet danger', textContent: 'Delete' });
 
   recut.addEventListener('click', async () => {
     recut.disabled = true;
     setStatus(`Re-cutting clip ${index + 1}…`);
     try {
       const updated = await window.clipper.recut({
-        src: job.src, file: clip.file, frame: job.frame, start: start.value, end: end.value,
+        source: job.source, file: clip.file, frame: job.frame, start: start.value, end: end.value,
       });
       video.src = updated.url;
       setStatus(`Clip ${index + 1} re-cut.`);
@@ -38,13 +40,33 @@ function clipCard(clip, index, job) {
     }
   });
   reveal.addEventListener('click', () => window.clipper.reveal(clip.file).catch((e) => setStatus(readable(e), true)));
+  save.addEventListener('click', async () => {
+    try {
+      const saved = await window.clipper.save(clip.file);
+      if (saved) setStatus(`Saved to ${saved}`);
+    } catch (e) {
+      setStatus(readable(e), true);
+    }
+  });
+  remove.addEventListener('click', async () => {
+    try {
+      if (!(await window.clipper.remove(clip.file))) return;
+      card.remove();
+      setStatus(`Clip ${index + 1} deleted.`);
+    } catch (e) {
+      setStatus(readable(e), true);
+    }
+  });
 
-  return el('article', { className: 'clip' }, [
+  const card = el('article', { className: 'clip' }, [
+
     video,
     el('h2', {}, [`Clip ${index + 1}`, el('small', { textContent: `+${clip.scoreDb} dB` })]),
     el('div', { className: 'trim' }, ['from', start, 'to', end, 's']),
-    el('div', { className: 'actions' }, [recut, reveal]),
+    el('div', { className: 'actions' }, [recut, save]),
+    el('div', { className: 'actions' }, [reveal, remove]),
   ]);
+  return card;
 }
 
 $('pick').addEventListener('click', async () => {

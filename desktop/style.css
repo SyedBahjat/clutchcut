@@ -72,6 +72,7 @@ button.quiet:hover { border-color: var(--paper); }
 .clip h2 small { font: 12px var(--mono); color: var(--ok); }
 .clip .trim { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .clip .trim input { width: 64px; padding: 5px 6px; font: 12px var(--mono); }
+button.danger:hover { border-color: var(--hot); color: var(--hot); }
 .clip .actions { display: flex; gap: 8px; margin-top: 10px; }
 .clip .actions button { flex: 1; padding: 7px 8px; font-size: 13px; }
 

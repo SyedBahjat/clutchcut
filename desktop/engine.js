@@ -8,6 +8,7 @@
 
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const SR = 8000;       // audio sample rate used for analysis
@@ -133,20 +134,53 @@ function cut(ffmpeg, src, start, end, dest, frame) {
     ...crop, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', dest]);
 }
 
-async function download(ytdlp, ffmpeg, url, dir) {
-  const out = await run(ytdlp, ['-f', 'bv*[height<=1080]+ba/b', '--merge-output-format', 'mp4', '--no-playlist',
-    '--ffmpeg-location', ffmpeg, '-o', path.join(dir, '%(id)s.%(ext)s'),
-    '--no-simulate', '--print', 'after_move:filepath', '--', url]);
+// YouTube now offers an audio format (IAMF) that the bundled ffmpeg cannot read, so skip it.
+const AUDIO_FORMAT = 'ba[acodec!*=iamf]/b';
+const VIDEO_FORMAT = 'bv*[height<=1080]+ba[acodec!*=iamf]/b';
+
+// A source is { file } for a video on disk, or { url, ytdlp } for a link. A link's
+// video is never saved: only its audio track is fetched, for the length of the analysis,
+// and then only the few seconds of each chosen clip.
+// (ffmpeg reading the stream address directly is throttled by the host, so yt-dlp fetches it.)
+async function withAudio(ffmpeg, source, use) {
+  if (source.file) return use(source.file);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clutchcut-'));
+  try {
+    const out = await run(source.ytdlp, ['-f', AUDIO_FORMAT, '--no-playlist', '--ffmpeg-location', ffmpeg,
+      '-o', path.join(dir, 'audio.%(ext)s'), '--no-simulate', '--print', 'after_move:filepath', '--', source.url]);
+    return await use(out.toString().trim().split(/\r?\n/).pop());
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Fetches just [start, end] of a linked video into dir; resolves with the file's path.
+async function fetchSection(ffmpeg, source, start, end, dir) {
+  const out = await run(source.ytdlp, ['-f', VIDEO_FORMAT, '--merge-output-format', 'mp4', '--no-playlist',
+    '--download-sections', `*${start.toFixed(2)}-${end.toFixed(2)}`, '--force-keyframes-at-cuts',
+    '--ffmpeg-location', ffmpeg, '-o', path.join(dir, `.section-${Date.now()}.%(ext)s`),
+    '--no-simulate', '--print', 'after_move:filepath', '--', source.url]);
   return out.toString().trim().split(/\r?\n/).pop();
 }
 
-async function clipVideo({ ffmpeg, src, count, frame, outDir, onProgress = () => {} }) {
+// Writes one clip to dest, whichever kind of source it comes from.
+async function render({ ffmpeg, source, start, end, dest, frame }) {
+  if (source.file) return cut(ffmpeg, source.file, start, end, dest, frame);
+  const section = await fetchSection(ffmpeg, source, start, end, path.dirname(dest));
+  try {
+    await cut(ffmpeg, section, 0, end - start, dest, frame);
+  } finally {
+    fs.rmSync(section, { force: true });
+  }
+}
+
+async function clipVideo({ ffmpeg, source, count, frame, outDir, onProgress = () => {} }) {
   onProgress('Listening for standout moments…');
-  const clips = planClips(loudnessDb(await loadAudio(ffmpeg, src)), count);
+  const clips = planClips(loudnessDb(await withAudio(ffmpeg, source, (file) => loadAudio(ffmpeg, file))), count);
   for (const [i, clip] of clips.entries()) {
     onProgress(`Cutting clip ${i + 1} of ${clips.length}…`);
     clip.file = path.join(outDir, `${String(i + 1).padStart(2, '0')}_${Math.floor(clip.start)}s.mp4`);
-    await cut(ffmpeg, src, clip.start, clip.end, clip.file, frame);
+    await render({ ffmpeg, source, start: clip.start, end: clip.end, dest: clip.file, frame });
   }
   fs.writeFileSync(path.join(outDir, 'clips.json'), JSON.stringify(clips, null, 2));
   return clips;
@@ -174,7 +208,7 @@ function selftest() {
   console.log('selftest ok');
 }
 
-module.exports = { clipVideo, cut, download };
+module.exports = { clipVideo, render };
 
 if (require.main === module) {
   const [arg, count] = process.argv.slice(2);
@@ -183,7 +217,7 @@ if (require.main === module) {
   else {
     const outDir = path.resolve('clips');
     fs.mkdirSync(outDir, { recursive: true });
-    clipVideo({ ffmpeg: 'ffmpeg', src: arg, count: Number(count) || 10, frame: 'fit', outDir, onProgress: console.log })
+    clipVideo({ ffmpeg: 'ffmpeg', source: { file: arg }, count: Number(count) || 10, frame: 'fit', outDir, onProgress: console.log })
       .then((clips) => console.log(clips.length ? clips : 'no standout moments found'))
       .catch((e) => { console.error(e.message); process.exit(1); });
   }

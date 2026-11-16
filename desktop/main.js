@@ -27,6 +27,16 @@ async function ensureYtdlp(onProgress) {
   return dest;
 }
 
+// A link becomes { url, ytdlp }; a path becomes { file }. Nothing is downloaded here.
+async function resolveSource(source, onProgress) {
+  if (/^https?:\/\//i.test(source)) {
+    if (!URL.canParse(source)) throw new Error('That link does not look valid.');
+    return { url: source, ytdlp: await ensureYtdlp(onProgress) };
+  }
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) throw new Error('That video file could not be found.');
+  return { file: source };
+}
+
 function insideOutput(file) {
   const resolved = path.resolve(String(file));
   if (!resolved.startsWith(outputRoot() + path.sep)) throw new Error('That file is outside the clips folder.');
@@ -52,29 +62,51 @@ ipcMain.handle('clip', async (event, { source, count, frame }) => {
   const outDir = path.join(outputRoot(), new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-'));
   fs.mkdirSync(outDir, { recursive: true });
 
-  let src = source;
-  if (/^https?:\/\//i.test(source)) {
-    if (!URL.canParse(source)) throw new Error('That link does not look valid.');
-    const ytdlp = await ensureYtdlp(onProgress);
-    onProgress('Downloading the video…');
-    src = await engine.download(ytdlp, ffmpeg, source, outDir);
-  } else if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
-    throw new Error('That video file could not be found.');
+  try {
+    const src = await resolveSource(source, onProgress);
+    frame = String(frame);
+    const clips = await engine.clipVideo({ ffmpeg, source: src, count, frame, outDir, onProgress });
+    return { source, frame, clips: clips.map(toView) };
+  } catch (e) {
+    try { fs.rmdirSync(outDir); } catch { /* has clips in it; keep them */ }
+    throw e;
   }
-
-  frame = String(frame);
-  const clips = await engine.clipVideo({ ffmpeg, src, count, frame, outDir, onProgress });
-  return { src, frame, clips: clips.map(toView) };
 });
 
-ipcMain.handle('recut', async (_event, { src, file, start, end, frame }) => {
+ipcMain.handle('recut', async (event, { source, file, start, end, frame }) => {
   start = Number(start);
   end = Number(end);
   if (!(start >= 0) || !(end > start)) throw new Error('End must be after start.');
-  if (!fs.existsSync(String(src))) throw new Error('The original video is no longer available.');
   file = insideOutput(file);
-  await engine.cut(ffmpeg, String(src), start, end, file, String(frame));
+  const src = await resolveSource(String(source), (msg) => event.sender.send('progress', msg));
+  await engine.render({ ffmpeg, source: src, start, end, dest: file, frame: String(frame) });
   return toView({ file, start, end });
+});
+
+ipcMain.handle('save', async (event, file) => {
+  file = insideOutput(file);
+  const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+    defaultPath: path.join(app.getPath('downloads'), path.basename(file)),
+    filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+  });
+  if (canceled || !filePath) return null;
+  fs.copyFileSync(file, filePath);
+  return filePath;
+});
+
+ipcMain.handle('remove', async (event, file) => {
+  file = insideOutput(file);
+  const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(event.sender), {
+    type: 'warning',
+    message: 'Delete this clip?',
+    detail: `${path.basename(file)} will be removed from your computer. This cannot be undone.`,
+    buttons: ['Delete', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+  });
+  if (response !== 0) return false;
+  fs.rmSync(file, { force: true });
+  return true;
 });
 
 ipcMain.handle('reveal', (_event, file) => shell.showItemInFolder(insideOutput(file)));

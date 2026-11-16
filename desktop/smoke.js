@@ -11,9 +11,9 @@ app.on('browser-window-created', (_event, win) => {
   win.webContents.once('did-finish-load', async () => {
     const js = (code) => win.webContents.executeJavaScript(code);
     await js(`document.getElementById('source').value = ${JSON.stringify(video)};
-              document.getElementById('job').requestSubmit();`);
+              document.getElementById('count').value = 3; document.getElementById('job').requestSubmit();`);
     let state;
-    for (let i = 0; i < 240; i++) {
+    for (let i = 0; i < 600; i++) {
       await sleep(500);
       state = await js(`({ clips: document.querySelectorAll('.clip').length,
                            busy: document.getElementById('go').disabled,
