@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const engine = require('./engine');
+const live = require('./live');
 
 // Bundled ffmpeg lives outside the app archive once packaged.
 const ffmpeg = require('ffmpeg-static').replace('app.asar', 'app.asar.unpacked');
@@ -54,7 +55,7 @@ ipcMain.handle('pick', async () => {
   return filePaths[0] ?? null;
 });
 
-ipcMain.handle('clip', async (event, { source, count, frame }) => {
+ipcMain.handle('clip', async (event, { source, count, frame, sensitivity }) => {
   const onProgress = (msg) => event.sender.send('progress', msg);
   source = String(source ?? '').trim();
   count = Math.min(30, Math.max(1, Math.floor(Number(count)) || 10));
@@ -64,8 +65,10 @@ ipcMain.handle('clip', async (event, { source, count, frame }) => {
   fs.mkdirSync(outDir, { recursive: true });
 
   try {
+    onProgress({ text: 'Checking the link…' });
     const src = await resolveSource(source, onProgress);
     frame = String(frame);
+    if (src.url && await live.isLive(src)) return await startLiveSession(event, src, outDir, frame, sensitivity);
     const clips = await engine.clipVideo({ ffmpeg, source: src, count, frame, outDir, onProgress });
     return { source, frame, clips: clips.map(toView) };
   } catch (e) {
@@ -73,6 +76,25 @@ ipcMain.handle('clip', async (event, { source, count, frame }) => {
     throw e;
   }
 });
+
+// One live stream at a time: clips arrive on the 'live-event' channel until it ends or is stopped.
+let session = null;
+
+async function startLiveSession(event, src, outDir, frame, sensitivity) {
+  if (session) throw new Error('A live stream is already being clipped. Stop it first.');
+  event.sender.send('progress', { text: 'Connecting to the live stream…' });
+  const send = (e) => {
+    if (event.sender.isDestroyed()) return;
+    event.sender.send('live-event', e.type === 'clip' ? { ...e, clip: toView(e.clip) } : e);
+    if (e.type === 'ended') session = null;
+  };
+  session = await live.startLive({ ffmpeg, source: src, outDir, frame, sensitivity: String(sensitivity || 'normal'), onEvent: send })
+    .catch((e) => { session = null; throw e; });
+  return { live: true, frame };
+}
+
+ipcMain.handle('live-stop', async () => { if (session) await session.stop(); });
+app.on('before-quit', () => { session?.kill(); });
 
 ipcMain.handle('recut', async (event, { source, file, start, end, frame }) => {
   start = Number(start);

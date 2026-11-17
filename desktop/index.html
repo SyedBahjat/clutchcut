@@ -50,6 +50,14 @@
             <label><input type="radio" name="frame" value="original"><span><i class="glyph wide"></i>Original</span></label>
           </div>
         </fieldset>
+        <fieldset class="field">
+          <legend class="label">Live sensitivity</legend>
+          <div class="segmented">
+            <label><input type="radio" name="sens" value="strict"><span>Fewer clips</span></label>
+            <label><input type="radio" name="sens" value="normal" checked><span>Balanced</span></label>
+            <label><input type="radio" name="sens" value="eager"><span>More clips</span></label>
+          </div>
+        </fieldset>
       </div>
     </section>
 
@@ -58,6 +66,17 @@
       <p id="stage">Starting…</p>
       <div class="bar" aria-hidden="true"><i id="bar"></i></div>
       <p class="hint">Longer videos take a few minutes. You can leave this window open.</p>
+    </section>
+
+    <section id="live" class="live" hidden aria-live="polite">
+      <div class="live-head">
+        <p class="live-badge"><i aria-hidden="true"></i><span id="live-state">LIVE</span></p>
+        <p id="live-text">Listening to the stream…</p>
+        <button type="button" id="stop" class="ghost">Stop</button>
+        <button type="button" id="live-again" class="ghost" hidden>Start over</button>
+      </div>
+      <p class="hint">Clips appear below as moments happen. Times count from when you started listening.</p>
+      <div id="live-clips" class="grid"></div>
     </section>
 
     <p id="error" class="error" role="alert" hidden></p>

@@ -27,13 +27,15 @@ function showError(msg) {
   $('error').hidden = !msg;
 }
 
-// 'start' | 'working' | 'results'
+// 'start' | 'working' | 'results' | 'live'
 function show(view) {
   $('start').hidden = view !== 'start';
   $('working').hidden = view !== 'working';
   $('results').hidden = view !== 'results';
+  $('live').hidden = view !== 'live';
 }
 
+const selectedSensitivity = () => document.querySelector('input[name="sens"]:checked').value;
 const selectedFrame = () => document.querySelector('input[name="frame"]:checked').value;
 const clipCount = () => Number($('count').textContent);
 function setCount(n) {
@@ -92,17 +94,17 @@ function clipCard(clip, index, job, onRemoved) {
     onRemoved();
   }));
 
-  const stage = el('div', { className: `stage${wide ? ' wide' : ''}` }, [video, el('span', { className: 'rank', textContent: `#${index + 1}` })]);
+  const stage = el('div', { className: `stage${wide ? ' wide' : ''}` }, [video, el('span', { className: 'rank', textContent: `#${clip.n ?? index + 1}` })]);
   const card = el('article', { className: 'clip' }, [
     stage,
     el('div', { className: 'body' }, [
       el('div', { className: 'meta' }, [range, el('b', { textContent: `+${clip.scoreDb} dB` })]),
       el('div', { className: 'meter', title: 'How far this moment rises above the stream’s normal loudness' }, [meter]),
       el('div', { className: 'actions' }, [save, reveal, remove]),
-      el('details', { className: 'trim' }, [
+      job.source ? el('details', { className: 'trim' }, [
         el('summary', { textContent: 'Adjust start and end' }),
         el('div', { className: 'trim-row' }, ['from', start, 'to', end, 's', recut]),
-      ]),
+      ]) : '',
     ]),
   ]);
   card.style.animationDelay = `${Math.min(index, 8) * 50}ms`;
@@ -125,8 +127,12 @@ async function run() {
   setProgress({ text: 'Starting…' });
   $('go').disabled = true;
   try {
-    const job = await window.clipper.clip({ source: $('source').value, count: clipCount(), frame: selectedFrame() });
-    if (job.clips.length) {
+    const job = await window.clipper.clip({
+      source: $('source').value, count: clipCount(), frame: selectedFrame(), sensitivity: selectedSensitivity(),
+    });
+    if (job.live) {
+      beginLive(job);
+    } else if (job.clips.length) {
       showResults(job);
     } else {
       show('start');
@@ -137,6 +143,42 @@ async function run() {
     showError(readable(e));
   } finally {
     $('go').disabled = false;
+  }
+}
+
+// Live: clips arrive one by one while the stream is still broadcasting.
+let liveJob = null;
+let liveCount = 0;
+
+function beginLive(job) {
+  liveJob = { source: null, frame: job.frame };
+  liveCount = 0;
+  $('live-clips').replaceChildren();
+  $('live').classList.remove('ended');
+  $('live-state').textContent = 'LIVE';
+  $('live-text').textContent = 'Listening to the stream…';
+  $('stop').hidden = false;
+  $('stop').disabled = false;
+  $('live-again').hidden = true;
+  show('live');
+}
+
+function onLive(e) {
+  if (!liveJob) return;
+  if (e.type === 'listening') $('live-text').textContent = 'Listening… the first clip can appear after about a minute.';
+  if (e.type === 'moment') $('live-text').textContent = `Moment spotted at ${clock(e.peak)}. Cutting once the reaction is over…`;
+  if (e.type === 'clip') {
+    liveCount += 1;
+    $('live-clips').prepend(clipCard(e.clip, e.clip.n - 1, liveJob, () => {}));
+    $('live-text').textContent = `${liveCount} clip${liveCount === 1 ? '' : 's'} so far. Still listening…`;
+  }
+  if (e.type === 'error') toast(e.message);
+  if (e.type === 'ended') {
+    $('live').classList.add('ended');
+    $('live-state').textContent = e.reason === 'stopped' ? 'STOPPED' : 'STREAM ENDED';
+    $('live-text').textContent = `${liveCount} clip${liveCount === 1 ? '' : 's'} saved.`;
+    $('stop').hidden = true;
+    $('live-again').hidden = false;
   }
 }
 
@@ -155,6 +197,12 @@ $('pick').addEventListener('click', async () => {
 $('less').addEventListener('click', () => setCount(clipCount() - 1));
 $('more').addEventListener('click', () => setCount(clipCount() + 1));
 $('again').addEventListener('click', () => { show('start'); $('source').select(); });
+$('stop').addEventListener('click', async () => {
+  $('stop').disabled = true;
+  $('live-text').textContent = 'Stopping and finishing the last clip…';
+  try { await window.clipper.liveStop(); } catch (e) { toast(readable(e)); $('stop').disabled = false; }
+});
+$('live-again').addEventListener('click', () => { liveJob = null; show('start'); $('source').select(); });
 $('folder').addEventListener('click', () => window.clipper.openFolder());
 
 // Drag a video anywhere onto the window.
@@ -170,6 +218,7 @@ window.addEventListener('drop', (e) => {
 });
 
 window.clipper.onProgress(setProgress);
+window.clipper.onLive(onLive);
 // A link sent from the website fills the box; pressing Find clips is still up to the person.
 window.clipper.onPrefill((link) => {
   show('start');

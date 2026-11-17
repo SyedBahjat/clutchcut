@@ -8,7 +8,6 @@
 
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 
 const SR = 8000;       // audio sample rate used for analysis
@@ -134,32 +133,67 @@ function cut(ffmpeg, src, start, end, dest, frame) {
     ...crop, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', dest]);
 }
 
+// Downloads from video sites fail now and then (a dropped connection, a throttled request),
+// so a step is tried a few times before giving up.
+async function withRetries(step, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await step();
+    } catch (e) {
+      if (attempt >= attempts) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
+  }
+}
+
 // YouTube now offers an audio format (IAMF) that the bundled ffmpeg cannot read, so skip it.
 const AUDIO_FORMAT = 'ba[acodec!*=iamf]/b';
-const VIDEO_FORMAT = 'bv*[height<=1080]+ba[acodec!*=iamf]/b';
+const VIDEO_FORMAT = 'bv*+ba[acodec!*=iamf]/b';
 
-// A source is { file } for a video on disk, or { url, ytdlp } for a link. A link's
-// video is never saved: only its audio track is fetched, for the length of the analysis,
-// and then only the few seconds of each chosen clip.
-// (ffmpeg reading the stream address directly is throttled by the host, so yt-dlp fetches it.)
-async function withAudio(ffmpeg, source, use) {
-  if (source.file) return use(source.file);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clutchcut-'));
-  try {
-    const out = await run(source.ytdlp, ['-f', AUDIO_FORMAT, '--no-playlist', '--ffmpeg-location', ffmpeg,
-      '-o', path.join(dir, 'audio.%(ext)s'), '--no-simulate', '--print', 'after_move:filepath', '--', source.url]);
-    return await use(out.toString().trim().split(/\r?\n/).pop());
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+// A source is { file } for a video on disk, or { url, ytdlp } for a link. A link's video
+// is never saved: its audio is piped straight from the downloader into the analyser (so not
+// even a temporary file is written), and then only the few seconds of each clip are fetched.
+// (ffmpeg reading a stream address directly is throttled by the host, so yt-dlp does the fetching.)
+function pipeAudio(ffmpeg, source) {
+  return new Promise((resolve, reject) => {
+    const opts = { windowsHide: true };
+    const dl = spawn(source.ytdlp, ['-f', AUDIO_FORMAT, '--no-playlist', '--quiet', '--no-warnings', '-o', '-', '--', source.url], opts);
+    const ff = spawn(ffmpeg, ['-v', 'error', '-i', 'pipe:0', '-vn', '-ac', '1', '-ar', String(SR), '-f', 's16le', '-'], opts);
+    const out = [];
+    let dlErr = '';
+    let ffErr = '';
+    let dlCode = null;
+    let ffCode = null;
+    const settle = () => {
+      if (dlCode === null || ffCode === null) return;
+      if (ffCode !== 0) {
+        const why = dlCode !== 0 && dlErr.trim() ? ` (the downloader said: ${dlErr.trim().split(/\r?\n/).pop()})` : '';
+        return reject(new Error(`ffmpeg failed: ${ffErr.trim() || `exit code ${ffCode}`}${why}`));
+      }
+      if (dlCode !== 0) return reject(new Error(`yt-dlp failed: ${dlErr.trim() || `exit code ${dlCode}`}`));
+      const buf = Buffer.concat(out);
+      const bytes = buf.length - (buf.length % 2);
+      resolve(new Int16Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + bytes)));
+    };
+    dl.stderr.on('data', (c) => { dlErr = (dlErr + c).slice(-1500); });
+    ff.stderr.on('data', (c) => { ffErr = (ffErr + c).slice(-1500); });
+    ff.stdout.on('data', (c) => out.push(c));
+    dl.stdout.pipe(ff.stdin);
+    ff.stdin.on('error', () => {}); // ffmpeg stopped reading early; its own exit explains why
+    dl.on('error', (e) => reject(new Error(`could not start yt-dlp: ${e.message}`)));
+    ff.on('error', (e) => reject(new Error(`could not start ffmpeg: ${e.message}`)));
+    dl.on('close', (code) => { dlCode = code; settle(); });
+    ff.on('close', (code) => { ffCode = code; settle(); });
+  });
 }
 
 // Fetches just [start, end] of a linked video into dir; resolves with the file's path.
 async function fetchSection(ffmpeg, source, start, end, dir) {
-  const out = await run(source.ytdlp, ['-f', VIDEO_FORMAT, '--merge-output-format', 'mp4', '--no-playlist',
+  const out = await withRetries(() => run(source.ytdlp, ['-f', VIDEO_FORMAT, '-S', 'res:1080', '--merge-output-format', 'mp4', '--no-playlist',
     '--download-sections', `*${start.toFixed(2)}-${end.toFixed(2)}`, '--force-keyframes-at-cuts',
+    '--downloader-args', 'ffmpeg_i:-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     '--ffmpeg-location', ffmpeg, '-o', path.join(dir, `.section-${Date.now()}.%(ext)s`),
-    '--no-simulate', '--print', 'after_move:filepath', '--', source.url]);
+    '--no-simulate', '--print', 'after_move:filepath', '--', source.url]));
   return out.toString().trim().split(/\r?\n/).pop();
 }
 
@@ -176,7 +210,8 @@ async function render({ ffmpeg, source, start, end, dest, frame }) {
 
 async function clipVideo({ ffmpeg, source, count, frame, outDir, onProgress = () => {} }) {
   onProgress({ text: 'Finding the loud moments…' });
-  const clips = planClips(loudnessDb(await withAudio(ffmpeg, source, (file) => loadAudio(ffmpeg, file))), count);
+  const samples = source.file ? await loadAudio(ffmpeg, source.file) : await withRetries(() => pipeAudio(ffmpeg, source));
+  const clips = planClips(loudnessDb(samples), count);
   for (const [i, clip] of clips.entries()) {
     onProgress({ text: `Cutting clip ${i + 1} of ${clips.length}…`, done: i, total: clips.length });
     clip.file = path.join(outDir, `${String(i + 1).padStart(2, '0')}_${Math.floor(clip.start)}s.mp4`);
@@ -208,7 +243,7 @@ function selftest() {
   console.log('selftest ok');
 }
 
-module.exports = { clipVideo, render };
+module.exports = { clipVideo, render, cut, snap, run, SR, HOP, SHORT, LONG, PRE, POST, MIN_GAP };
 
 if (require.main === module) {
   const [arg, count] = process.argv.slice(2);

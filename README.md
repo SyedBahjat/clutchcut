@@ -8,6 +8,15 @@ normal level), keeps the setup before each one and the reaction after, and lands
 a pause. Clips can be vertical with the whole picture kept, vertical zoomed in, or left as-is,
 and you can adjust any clip's start and end and re-cut it.
 
+### Live streams
+
+Paste the link of a stream that is broadcasting right now and ClutchCut clips it as it happens:
+no waiting for it to end. It listens to the stream, keeps the last few minutes of video in a
+temporary buffer, and cuts a clip about twenty seconds after each loud moment. The buffer is
+deleted when you stop, and the full broadcast is never saved. Use "Live sensitivity" to get
+fewer or more clips. Links to finished videos work the same as before. Only YouTube has been
+tested; other sites supported by yt-dlp should work too.
+
 ## Install
 
 **macOS** (Apple silicon or Intel). Paste this into Terminal:
