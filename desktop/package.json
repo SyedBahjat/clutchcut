@@ -21,8 +21,9 @@
   },
   "build": {
     "appId": "com.clutchcut.app",
-    "files": ["main.js", "preload.js", "engine.js", "index.html", "style.css", "renderer.js"],
+    "files": ["main.js", "preload.js", "engine.js", "index.html", "style.css", "renderer.js", "build/icon.png"],
     "asarUnpack": ["node_modules/ffmpeg-static/**"],
+    "protocols": [{ "name": "ClutchCut link", "schemes": ["clutchcut"] }],
     "mac": { "target": "dmg", "category": "public.app-category.video", "identity": "-" },
     "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },

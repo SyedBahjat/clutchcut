@@ -7,7 +7,8 @@ const engine = require('./engine');
 
 // Bundled ffmpeg lives outside the app archive once packaged.
 const ffmpeg = require('ffmpeg-static').replace('app.asar', 'app.asar.unpacked');
-const outputRoot = () => path.join(app.getPath('videos'), app.getName());
+// CLUTCHCUT_OUTPUT lets tests write somewhere disposable instead of the Videos folder.
+const outputRoot = () => process.env.CLUTCHCUT_OUTPUT || path.join(app.getPath('videos'), app.getName());
 
 const YTDLP_ASSET = { darwin: 'yt-dlp_macos', win32: 'yt-dlp.exe', linux: 'yt-dlp_linux' };
 
@@ -19,7 +20,7 @@ async function ensureYtdlp(onProgress) {
   if (!asset) throw new Error('Link downloads are not supported on this system. Choose a video file instead.');
   const dest = path.join(app.getPath('userData'), asset);
   if (fs.existsSync(dest)) return dest;
-  onProgress('Setting up link downloads (first time only)…');
+  onProgress({ text: 'Setting up link downloads (first time only)…' });
   const res = await fetch(`https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`);
   if (!res.ok) throw new Error(`Could not set up link downloads (HTTP ${res.status}). Check your connection.`);
   fs.writeFileSync(`${dest}.part`, Buffer.from(await res.arrayBuffer()), { mode: 0o755 });
@@ -111,17 +112,63 @@ ipcMain.handle('remove', async (event, file) => {
 
 ipcMain.handle('reveal', (_event, file) => shell.showItemInFolder(insideOutput(file)));
 
-app.whenReady().then(() => {
-  const win = new BrowserWindow({
-    width: 1100,
-    height: 780,
-    minWidth: 720,
-    minHeight: 560,
-    backgroundColor: '#14110f',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
-  });
-  win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, 'index.html'));
+ipcMain.handle('open-folder', () => {
+  fs.mkdirSync(outputRoot(), { recursive: true });
+  return shell.openPath(outputRoot());
 });
 
-app.on('window-all-closed', () => app.quit());
+// The website hands a link over as clutchcut://clip?url=<video link>. It only fills in the
+// box; the person still presses the button, so a web page can never start work by itself.
+const PROTOCOL = 'clutchcut';
+let win = null;
+let pendingLink = null;
+
+function linkFrom(args) {
+  const raw = args.find((a) => String(a).startsWith(`${PROTOCOL}://`));
+  if (!raw || !URL.canParse(raw)) return null;
+  const target = new URL(raw).searchParams.get('url') ?? '';
+  return /^https?:\/\//i.test(target) && URL.canParse(target) ? target : null;
+}
+
+function offer(link) {
+  if (!link) return;
+  if (win && !win.webContents.isLoading()) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    win.webContents.send('prefill', link);
+  } else {
+    pendingLink = link;
+  }
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => offer(linkFrom(argv)));
+  app.on('open-url', (event, url) => { event.preventDefault(); offer(linkFrom([url])); }); // macOS
+
+  app.whenReady().then(() => {
+    // Registering only when installed keeps `npm start` from hijacking the link handler.
+    if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL);
+    const icon = path.join(__dirname, 'build', 'icon.png');
+    if (process.platform === 'darwin' && fs.existsSync(icon)) app.dock?.setIcon(icon);
+
+    win = new BrowserWindow({
+      width: 1180,
+      height: 820,
+      minWidth: 760,
+      minHeight: 600,
+      backgroundColor: '#0b0a09',
+      icon: fs.existsSync(icon) ? icon : undefined,
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+    });
+    win.setMenuBarVisibility(false);
+    win.webContents.once('did-finish-load', () => {
+      offer(pendingLink ?? linkFrom(process.argv));
+      pendingLink = null;
+    });
+    win.loadFile(path.join(__dirname, 'index.html'));
+  });
+
+  app.on('window-all-closed', () => app.quit());
+}

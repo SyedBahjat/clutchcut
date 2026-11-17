@@ -1,0 +1,11 @@
+{
+  "name": "clutchcut",
+  "private": true,
+  "license": "MIT",
+  "description": "Shortcuts for running ClutchCut from the project root.",
+  "scripts": {
+    "start": "npm --prefix desktop install --no-audit --no-fund && npm --prefix desktop start",
+    "test": "npm --prefix desktop test",
+    "web": "npm --prefix web install --no-audit --no-fund && npm --prefix web run dev"
+  }
+}

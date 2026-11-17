@@ -3,7 +3,7 @@
 Finds the standout moments in long gameplay videos and cuts them into clips. It runs on your
 own computer: paste a link or choose a file, and the video never leaves your machine.
 
-Today it finds moments from the audio (shouts, laughs, crashes that jump above the stream's
+Paste a link or drop a file. Today it finds moments from the audio (shouts, laughs, crashes that jump above the stream's
 normal level), keeps the setup before each one and the reaction after, and lands the cuts in
 a pause. Clips can be vertical with the whole picture kept, vertical zoomed in, or left as-is,
 and you can adjust any clip's start and end and re-cut it.
@@ -36,14 +36,15 @@ On the SmartScreen prompt, click **More info** → **Run anyway**.
 
 ## Run from source
 
+You need [Node.js](https://nodejs.org) 22 or newer. From the project folder:
+
 ```sh
-cd desktop
-npm install
-npm start      # open the app
-npm test       # check the clip-finding logic
+npm start      # installs what the app needs the first time, then opens it
+npm test       # checks the clip-finding logic
+npm run web    # the website, at http://localhost:3000
 ```
 
-The website in `web/` is a Next.js landing page (`npm install && npm run dev`).
+(`npm start` works from this folder; the app itself lives in `desktop/`.)
 
 ## Releasing
 

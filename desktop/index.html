@@ -2,39 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src file:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src file:; img-src 'self' data:">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ClutchCut</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>Clutch<span>Cut</span></h1>
-    <p>Finds the loud moments in a long video and cuts them out. Everything runs on this computer.</p>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#1d1a17"/>
+        <rect x="9.5" y="12" width="2.6" height="8" rx="1.3" fill="#ff5a1f"/>
+        <rect x="14.7" y="7" width="2.6" height="18" rx="1.3" fill="#d9f23c"/>
+        <rect x="19.9" y="11" width="2.6" height="10" rx="1.3" fill="#ff5a1f"/>
+      </svg>
+      <strong>Clutch<span>Cut</span></strong>
+    </div>
+    <button type="button" id="folder" class="ghost small">Open clips folder</button>
   </header>
 
   <main>
-    <form id="job">
-      <label for="source">Video link or file</label>
-      <div class="source-row">
-        <input id="source" type="text" placeholder="Paste a video link, or choose a file" autocomplete="off" spellcheck="false">
-        <button type="button" id="pick" class="quiet">Choose file</button>
-      </div>
-      <div class="options">
-        <label>Clips <input id="count" type="number" min="1" max="30" value="10"></label>
-        <label>Shape
-          <select id="frame">
-            <option value="fit">Vertical, whole picture</option>
-            <option value="fill">Vertical, zoomed in</option>
-            <option value="original">Same as the video</option>
-          </select>
-        </label>
-        <button type="submit" id="go">Find clips</button>
-      </div>
-    </form>
+    <section id="start" class="start">
+      <h1>Drop in a stream.<br><em>Get the clips.</em></h1>
+      <p class="sub">Paste a video link or drop a file. ClutchCut finds the loud moments and cuts them for you, right here on your computer.</p>
 
-    <p id="status" role="status" aria-live="polite"></p>
-    <section id="clips" aria-label="Clips"></section>
+      <form id="job" class="pill" autocomplete="off">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input id="source" type="text" placeholder="Paste a video link, or choose a file" spellcheck="false" aria-label="Video link or file path">
+        <button type="button" id="pick" class="ghost">Choose file</button>
+        <button type="submit" id="go" class="primary">Find clips</button>
+      </form>
+
+      <div class="options">
+        <div class="field">
+          <span class="label" id="count-label">Clips</span>
+          <div class="stepper" role="group" aria-labelledby="count-label">
+            <button type="button" id="less" aria-label="Fewer clips">−</button>
+            <output id="count" aria-live="polite">10</output>
+            <button type="button" id="more" aria-label="More clips">+</button>
+          </div>
+        </div>
+        <fieldset class="field">
+          <legend class="label">Shape</legend>
+          <div class="segmented">
+            <label><input type="radio" name="frame" value="fit" checked><span><i class="glyph fit"></i>Whole picture</span></label>
+            <label><input type="radio" name="frame" value="fill"><span><i class="glyph fill"></i>Zoomed in</span></label>
+            <label><input type="radio" name="frame" value="original"><span><i class="glyph wide"></i>Original</span></label>
+          </div>
+        </fieldset>
+      </div>
+    </section>
+
+    <section id="working" class="working" hidden aria-live="polite">
+      <div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p id="stage">Starting…</p>
+      <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+      <p class="hint">Longer videos take a few minutes. You can leave this window open.</p>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="results" class="results" hidden>
+      <div class="results-head">
+        <h2 id="results-title">Clips</h2>
+        <button type="button" id="again" class="ghost">Start over</button>
+      </div>
+      <div id="clips" class="grid"></div>
+    </section>
   </main>
+
+  <div id="drop" class="drop" hidden><p>Drop a video to clip it</p></div>
+  <p id="toast" class="toast" role="status" aria-live="polite" hidden></p>
 
   <script src="renderer.js"></script>
 </body>

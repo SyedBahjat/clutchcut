@@ -175,10 +175,10 @@ async function render({ ffmpeg, source, start, end, dest, frame }) {
 }
 
 async function clipVideo({ ffmpeg, source, count, frame, outDir, onProgress = () => {} }) {
-  onProgress('Listening for standout moments…');
+  onProgress({ text: 'Finding the loud moments…' });
   const clips = planClips(loudnessDb(await withAudio(ffmpeg, source, (file) => loadAudio(ffmpeg, file))), count);
   for (const [i, clip] of clips.entries()) {
-    onProgress(`Cutting clip ${i + 1} of ${clips.length}…`);
+    onProgress({ text: `Cutting clip ${i + 1} of ${clips.length}…`, done: i, total: clips.length });
     clip.file = path.join(outDir, `${String(i + 1).padStart(2, '0')}_${Math.floor(clip.start)}s.mp4`);
     await render({ ffmpeg, source, start: clip.start, end: clip.end, dest: clip.file, frame });
   }
