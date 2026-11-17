@@ -7,7 +7,7 @@ const STEPS = [
 const FEATURES = [
   { title: 'Vertical, without losing the picture', body: 'Clips fit a 9:16 frame with the whole video kept inside over a soft blurred backdrop. Or zoom in to fill the screen, or keep the original shape.', wide: true, demo: 'frames' },
   { title: 'Cuts that land in a pause', body: 'Start and end points move to the quietest instant nearby, so a clip does not begin or end in the middle of a word.' },
-  { title: 'Stays on your computer', body: 'No upload, no account, no watermark. Your footage and your clips never leave your machine.' },
+  { title: 'Nothing kept', body: 'No upload, no account, no watermark. On the web, clips are cut on the fly and sent straight to your browser; nothing is stored. In the app, everything stays on your machine.' },
   { title: 'Trim, re-cut, save, delete', body: 'Nudge any clip’s start and end and re-cut it in seconds. Save a copy anywhere, or remove it for good.', wide: true },
   { title: 'Open source, MIT licensed', body: 'Read the code, fork it, change it. Releases are built in public on GitHub.', full: true, demo: 'code' },
 ];

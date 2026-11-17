@@ -4,7 +4,7 @@ export default function Nav() {
   return (
     <>
       <p className="announce">
-        Free and open source · Runs on your own computer · No account, no watermark
+        Free and open source · Clip on the web or in the app · No account, no watermark
       </p>
       <header className="nav">
         <div className="wrap nav-row">

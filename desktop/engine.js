@@ -208,10 +208,15 @@ async function render({ ffmpeg, source, start, end, dest, frame }) {
   }
 }
 
+// The clip plan ({ peak, scoreDb, start, end } each) without cutting anything.
+async function findMoments(ffmpeg, source, count) {
+  const samples = source.file ? await loadAudio(ffmpeg, source.file) : await withRetries(() => pipeAudio(ffmpeg, source));
+  return planClips(loudnessDb(samples), count);
+}
+
 async function clipVideo({ ffmpeg, source, count, frame, outDir, onProgress = () => {} }) {
   onProgress({ text: 'Finding the loud moments…' });
-  const samples = source.file ? await loadAudio(ffmpeg, source.file) : await withRetries(() => pipeAudio(ffmpeg, source));
-  const clips = planClips(loudnessDb(samples), count);
+  const clips = await findMoments(ffmpeg, source, count);
   for (const [i, clip] of clips.entries()) {
     onProgress({ text: `Cutting clip ${i + 1} of ${clips.length}…`, done: i, total: clips.length });
     clip.file = path.join(outDir, `${String(i + 1).padStart(2, '0')}_${Math.floor(clip.start)}s.mp4`);
@@ -243,7 +248,7 @@ function selftest() {
   console.log('selftest ok');
 }
 
-module.exports = { clipVideo, render, cut, snap, run, SR, HOP, SHORT, LONG, PRE, POST, MIN_GAP };
+module.exports = { clipVideo, findMoments, render, cut, snap, run, SR, HOP, SHORT, LONG, PRE, POST, MIN_GAP };
 
 if (require.main === module) {
   const [arg, count] = process.argv.slice(2);

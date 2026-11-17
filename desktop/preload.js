@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('clipper', {
   remove: (file) => ipcRenderer.invoke('remove', file),
   liveStop: () => ipcRenderer.invoke('live-stop'),
   onLive: (fn) => ipcRenderer.on('live-event', (_event, e) => fn(e)),
+  star: () => ipcRenderer.invoke('star'),
   openFolder: () => ipcRenderer.invoke('open-folder'),
   onProgress: (fn) => ipcRenderer.on('progress', (_event, msg) => fn(msg)),
   onPrefill: (fn) => ipcRenderer.on('prefill', (_event, link) => fn(link)),

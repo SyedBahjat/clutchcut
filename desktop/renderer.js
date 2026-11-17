@@ -28,7 +28,21 @@ function showError(msg) {
 }
 
 // 'start' | 'working' | 'results' | 'live'
+// After a finished job, ask once for a GitHub star; starring or closing it ends the asking.
+const STAR_KEY = 'clutchcut-star-asked';
+const starAsked = () => { try { return !!localStorage.getItem(STAR_KEY); } catch { return false; } };
+function closeStar() {
+  try { localStorage.setItem(STAR_KEY, '1'); } catch { /* shows again next time */ }
+  $('star').hidden = true;
+}
+function offerStar(where) {
+  if (starAsked()) return;
+  where.before($('star'));
+  $('star').hidden = false;
+}
+
 function show(view) {
+  $('star').hidden = true;
   $('start').hidden = view !== 'start';
   $('working').hidden = view !== 'working';
   $('results').hidden = view !== 'results';
@@ -119,6 +133,7 @@ function showResults(job) {
   $('clips').replaceChildren(...job.clips.map((clip, i) => clipCard(clip, i, job, () => { left -= 1; title(); })));
   title();
   show('results');
+  offerStar($('clips'));
 }
 
 async function run() {
@@ -179,6 +194,7 @@ function onLive(e) {
     $('live-text').textContent = `${liveCount} clip${liveCount === 1 ? '' : 's'} saved.`;
     $('stop').hidden = true;
     $('live-again').hidden = false;
+    if (liveCount) offerStar($('live-clips'));
   }
 }
 
@@ -203,6 +219,8 @@ $('stop').addEventListener('click', async () => {
   try { await window.clipper.liveStop(); } catch (e) { toast(readable(e)); $('stop').disabled = false; }
 });
 $('live-again').addEventListener('click', () => { liveJob = null; show('start'); $('source').select(); });
+$('star-go').addEventListener('click', () => { window.clipper.star(); closeStar(); });
+$('star-x').addEventListener('click', closeStar);
 $('folder').addEventListener('click', () => window.clipper.openFolder());
 
 // Drag a video anywhere onto the window.
