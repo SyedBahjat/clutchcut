@@ -133,7 +133,7 @@ ipcMain.handle('remove', async (event, file) => {
 });
 
 // Fixed address: the page cannot ask the app to open anything else.
-ipcMain.handle('star', () => shell.openExternal('https://github.com/SyedBahjat/clutchcut'));
+ipcMain.handle('star', () => shell.openExternal('https://github.com/SyedBahjat/clutchcut-stream-clipper'));
 
 ipcMain.handle('reveal', (_event, file) => shell.showItemInFolder(insideOutput(file)));
 

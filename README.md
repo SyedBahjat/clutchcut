@@ -22,7 +22,7 @@ tested; other sites supported by yt-dlp should work too.
 **macOS** (Apple silicon or Intel). Paste this into Terminal:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SyedBahjat/clutchcut/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SyedBahjat/clutchcut-stream-clipper/main/install.sh | bash
 ```
 
 It downloads the latest release, puts ClutchCut in Applications and opens it ([read the script](install.sh)).
@@ -40,7 +40,7 @@ xattr -cr /Applications/ClutchCut.app
 This only removes the "downloaded from the internet" flag.
 </details>
 
-**Windows:** download `ClutchCut-Setup-x.y.z.exe` from [Releases](https://github.com/SyedBahjat/clutchcut/releases/latest).
+**Windows:** download `ClutchCut-Setup-x.y.z.exe` from [Releases](https://github.com/SyedBahjat/clutchcut-stream-clipper/releases/latest).
 On the SmartScreen prompt, click **More info** → **Run anyway**.
 
 ## Run from source

@@ -1,13 +1,13 @@
 #!/bin/bash
 # ClutchCut installer for macOS.
-#   curl -fsSL https://raw.githubusercontent.com/SyedBahjat/clutchcut/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/SyedBahjat/clutchcut-stream-clipper/main/install.sh | bash
 #
 # Downloads the latest release for your Mac (Apple silicon or Intel) and installs it in /Applications.
 # Why a script: ClutchCut isn't notarized by Apple, and macOS blocks un-notarized apps that a
 # browser downloaded. Files downloaded with curl aren't flagged, so the app opens normally.
 set -euo pipefail
 
-REPO="SyedBahjat/clutchcut"
+REPO="SyedBahjat/clutchcut-stream-clipper"
 APP="/Applications/ClutchCut.app"
 TMP="$(mktemp -d)"
 MNT=""

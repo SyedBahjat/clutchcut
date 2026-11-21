@@ -52,7 +52,7 @@ export function Features() {
                   <figure><i className="f-wide" /><figcaption>Original</figcaption></figure>
                 </div>
               )}
-              {demo === 'code' && <code className="snippet" aria-hidden="true">git clone github.com/SyedBahjat/clutchcut</code>}
+              {demo === 'code' && <code className="snippet" aria-hidden="true">git clone github.com/SyedBahjat/clutchcut-stream-clipper</code>}
             </article>
           ))}
         </div>

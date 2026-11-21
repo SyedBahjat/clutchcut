@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "Finds the standout moments in long videos and cuts them into clips.",
   "license": "MIT",
-  "repository": "github:SyedBahjat/clutchcut",
+  "repository": "github:SyedBahjat/clutchcut-stream-clipper",
   "private": true,
   "main": "main.js",
   "scripts": {
